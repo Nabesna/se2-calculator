@@ -1,0 +1,259 @@
+{
+  "build": "26163761",
+  "checked": "2026-10-25",
+  "note": "Из установленной Vanilla SE2; это версия Steam, не $Bundles отдельных сериализованных файлов. Массы не восстановлены. Н/1000 → кН; кВт/1000 → МВт; накопленные кВт·с/3600000 → МВт·ч. Удельная масса газа не подтверждена.",
+  "evidence": [
+    {
+      "file": "Blocks/Thrusters/Atmospheric/100/AtmosphericThruster100_ThrusterDefinition.def",
+      "sha256": "415dc0b8cc2b0ba8f50239b5eb330a4bbc11fa66a67d853bcffe69bb27055a51",
+      "value": {
+        "Guid": "b4c0770f-75e1-4be6-a426-5fce05a8875e",
+        "ThrustPower": 40000,
+        "ThrustClass": "Atmospheric",
+        "ResourcesRequiredToThrust": 75
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Atmospheric/1000/AtmosphericThruster1000_ThrusterDefinition.def",
+      "sha256": "fae1ebed72f2ea9682ef2264b73461a8776cc02b474ef73c93e3a3561f7951e3",
+      "value": {
+        "Guid": "8c8fbdf6-62b0-43af-a8d0-8dd7ef82a7fb",
+        "ThrustPower": 15465370,
+        "ThrustClass": "Atmospheric",
+        "ResourcesRequiredToThrust": 16000
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Atmospheric/250/AtmosphericThruster250_ThrusterDefinition.def",
+      "sha256": "2051dec537fc6eb876691959cfa8362dbf73cd9e9745e818100905604ebf81ad",
+      "value": {
+        "Guid": "b8646dfd-ae47-43a5-980d-d5de9a286de6",
+        "ThrustPower": 287136.3,
+        "ThrustClass": "Atmospheric",
+        "ResourcesRequiredToThrust": 650
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Atmospheric/500/AtmosphericThruster500_ThrusterDefinition.def",
+      "sha256": "72ffd85e2d17896822f955dbe6fea299f2a4b4715d70f92d0e1912417ebfee1b",
+      "value": {
+        "Guid": "a4ebbf66-2aec-4278-8439-8eceb3853a5c",
+        "ThrustPower": 1516383,
+        "ThrustClass": "Atmospheric",
+        "ResourcesRequiredToThrust": 2400
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Hydrogen/200/HydrogenThruster200_HydrogenThrusterDefinition.def",
+      "sha256": "43b50d01199e74e2e9df0b8ae1ad01e6afda6aa6c37168d956898bc59bf9d982",
+      "value": {
+        "Guid": "1b1ffe74-25ea-488d-bc81-88ad9d64a313",
+        "ThrustPower": 359468.8,
+        "ResourcesRequiredToThrust": 4
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Hydrogen/250/HydrogenThruster250_HydrogenThrusterDefinition.def",
+      "sha256": "c544e300274aebe9d9fb77c74bac4fe30460b87e91987c872c979dbd922fe6ae",
+      "value": {
+        "Guid": "2fa7936c-0ecb-4294-b709-c772eb3d5c09",
+        "ThrustPower": 1895631,
+        "ResourcesRequiredToThrust": 12
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Hydrogen/50/HydrogenThruster50_HydrogenThrusterDefinition.def",
+      "sha256": "c438616585f74b75440f10e40a25ba9121ea6a9205689de645aa029b97621b5a",
+      "value": {
+        "Guid": "ea9a815d-cc7b-41a1-9b7a-57698a5f1f1d",
+        "ThrustPower": 60000,
+        "ResourcesRequiredToThrust": 0.75
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Hydrogen/750/HydrogenThruster750_HydrogenThrusterDefinition.def",
+      "sha256": "1a8ad13324285a392ac20817ec050bc41baf9ff64851f4a795e4936ad1afd2fe",
+      "value": {
+        "Guid": "dfc07c17-2202-4bed-be5c-6ce3e4baa93d",
+        "ThrustPower": 19395660,
+        "ResourcesRequiredToThrust": 120
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Ion/100/IonThruster100_ThrusterDefinition.def",
+      "sha256": "43882668c964a0d6e6fc1a0c77303840fd2e1346ff8a75038e63de819f03cdb7",
+      "value": {
+        "Guid": "152d06aa-6b81-4dc6-803c-308b318d4aa1",
+        "ThrustPower": 8950.306,
+        "ThrustClass": "Ion",
+        "ResourcesRequiredToThrust": 40
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Ion/150/IonThruster150_ThrusterDefinition.def",
+      "sha256": "e998406869353e178027fb21fa63306359d373b0e0fd2e4ec28e5909d772b655",
+      "value": {
+        "Guid": "fff9f677-47a7-439e-8a2b-f5708da129df",
+        "ThrustPower": 82492.88,
+        "ThrustClass": "Ion",
+        "ResourcesRequiredToThrust": 240
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Ion/500/IonThruster500_ThrusterDefinition.def",
+      "sha256": "210c19c0aba06c33b49a61cead430d271248540eeff63b930e16561c00208f5e",
+      "value": {
+        "Guid": "9dc3951e-f389-4558-983f-eaf62796fa19",
+        "ThrustPower": 856368.56,
+        "ThrustClass": "Ion",
+        "ResourcesRequiredToThrust": 1800
+      }
+    },
+    {
+      "file": "Blocks/Thrusters/Ion/750/IonThruster750_ThrusterDefinition.def",
+      "sha256": "a6e9caa299c6e84ba3b06771eff65a11bc781ea0d94f0463f7778fe575a6f287",
+      "value": {
+        "Guid": "e80f38c1-e3d7-4b30-b811-1c7725c383ae",
+        "ThrustPower": 5636987,
+        "ThrustClass": "Ion",
+        "ResourcesRequiredToThrust": 8000
+      }
+    },
+    {
+      "file": "Blocks/Batteries/Battery/150/Battery150_Battery_ResourceContainerInventoryDefinition.def",
+      "sha256": "b79ead1c59e1ac7ceb0cb191ff1a33d02ba938f1806942c441f2157af0367553",
+      "value": {
+        "Guid": "d03bcf2f-5649-4d18-b6e9-97ec0f6b3c6f",
+        "MaxCapacity": 3600000,
+        "MaxChargingRate": 1599,
+        "MaxDischargeRate": 1600
+      }
+    },
+    {
+      "file": "Blocks/Batteries/Battery/250/Battery250_Battery_ResourceContainerInventoryDefinition.def",
+      "sha256": "2ab39fa316d5f538905faa57b258167a3a12280dca518a2d006f145ea24761ab",
+      "value": {
+        "Guid": "fe6e9a4d-ed7e-49f3-a814-28c87ed07a0d",
+        "MaxCapacity": 14400000,
+        "MaxChargingRate": 9599,
+        "MaxDischargeRate": 9600
+      }
+    },
+    {
+      "file": "Blocks/Batteries/Battery/50/Battery50_Battery_ResourceContainerInventoryDefinition.def",
+      "sha256": "be6090b6fd98db6bc1b75530b8163725349507cf6f76fbc01640906cad97dc70",
+      "value": {
+        "Guid": "ca5777b4-29dc-4bb4-b096-85a77d4a1522",
+        "MaxCapacity": 180000,
+        "MaxChargingRate": 199.9,
+        "MaxDischargeRate": 200
+      }
+    },
+    {
+      "file": "Blocks/Tanks/Hydrogen/1250/HydrogenTank1250_TanksResourceContainer.def",
+      "sha256": "802bc6deb850fbad7e3e8f6ef9223250da1d2636b312cdd5a691855b3da07f5b",
+      "value": {
+        "Guid": "edafa9fb-c3a0-4fc0-b881-88f8aeba5ee6",
+        "ProductionPriority": {
+          "Priority": 0
+        },
+        "MaxCapacity": 1280000,
+        "MaxChargingRate": 99999.9,
+        "MaxDischargeRate": 100000
+      }
+    },
+    {
+      "file": "Blocks/Tanks/Hydrogen/150/HydrogenTank150_TanksResourceContainer.def",
+      "sha256": "bd9bbf7062f43023c4662e83574819d36e03c026069b6047505b52299f05fefb",
+      "value": {
+        "Guid": "53dab993-26c6-4e4a-9fab-32f04c5a2f26",
+        "ProductionPriority": {
+          "Priority": 0
+        },
+        "MaxCapacity": 8000,
+        "MaxChargingRate": 1999.9,
+        "MaxDischargeRate": 2000
+      }
+    },
+    {
+      "file": "Blocks/Tanks/Hydrogen/500/HydrogenTank500_TanksResourceContainer.def",
+      "sha256": "bfab3a1337272e0994bede70c9d2065f630e56f867331fb72f36f98b8eaa78c9",
+      "value": {
+        "Guid": "c030a5a7-3a75-45f9-93a2-bbabcc6fc8e5",
+        "ProductionPriority": {
+          "Priority": 0
+        },
+        "MaxCapacity": 32000,
+        "MaxChargingRate": 3999.9,
+        "MaxDischargeRate": 4000
+      }
+    },
+    {
+      "file": "System/Configurations/ThrustClassesConfiguration.def",
+      "sha256": "378db229fd8b6aab0d830346f8feba5e9221da86329bd8d3423ae91cd1622581",
+      "value": {
+        "Guid": "586e1207-50df-4982-9afd-63a15f5d0d1f",
+        "ThrustClasses": [
+          {
+            "$Key": "Ion",
+            "$Value": {
+              "MaxThrustAirDensity": 0.2,
+              "MinThrustAirDensity": 0.8,
+              "WaterSubmersionTolerance": 1,
+              "WaterOnly": false
+            }
+          },
+          {
+            "$Key": "Atmospheric",
+            "$Value": {
+              "MaxThrustAirDensity": 0.8,
+              "MinThrustAirDensity": 0.2,
+              "WaterSubmersionTolerance": 1,
+              "WaterOnly": false
+            }
+          },
+          {
+            "$Key": "Hydrogen",
+            "$Value": {
+              "MaxThrustAirDensity": 0,
+              "MinThrustAirDensity": -1,
+              "WaterSubmersionTolerance": 1,
+              "WaterOnly": false
+            }
+          },
+          {
+            "$Key": "Water",
+            "$Value": {
+              "MaxThrustAirDensity": 0,
+              "MinThrustAirDensity": -1,
+              "WaterSubmersionTolerance": 1,
+              "WaterOnly": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "file": "System/ResourceTypes/Electricity.def",
+      "sha256": "ebd75550be9bb15155a3c483050e0e74029cce4c78f43166e63762dbd7b15fdd",
+      "value": {
+        "Guid": "bcded093-f5c0-4997-af3a-a6fbd853ad66",
+        "Name": "ResourceElectricity",
+        "FlowRateUnits": "Kilowatts",
+        "StorageUnits": "KilowattHours",
+        "RequiresConveyors": false
+      }
+    },
+    {
+      "file": "System/ResourceTypes/Hydrogen.def",
+      "sha256": "3786786d85d361c21bbc015fdef79ed847aa4a5b861ac7a5f8e4f988aaa187c6",
+      "value": {
+        "Guid": "a0e12811-7f81-4735-aef4-b74ef0c2d395",
+        "Name": "ResourceHydrogen",
+        "FlowRateUnits": "LitersPerSecond",
+        "StorageUnits": "Liters",
+        "RequiresConveyors": true
+      }
+    }
+  ]
+}
