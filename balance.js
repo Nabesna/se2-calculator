@@ -24,15 +24,18 @@
   };
   const clone=o=>JSON.parse(JSON.stringify(o));
   function center(model,legacyFill=model.fill??1) {
-    if (!Number.isFinite(model.mass)||model.mass<=0) throw Error('Нужна масса остального корабля больше нуля.');
+    if (!Number.isFinite(model.mass)||model.mass<=0||model.mass>1e12) throw Error('Нужна масса остального корабля больше нуля.');
     if (!Number.isFinite(legacyFill)||legacyFill<0||legacyFill>1) throw Error('Проверьте старый общий уровень загрузки.');
+    if(!Array.isArray(model.origin)||model.origin.length!==3||!model.origin.every(Number.isFinite))throw Error('Проверьте центр остального корабля.');
     let total=model.mass, sum=model.origin.map(v=>v*model.mass), cargo=0, blocksMass=0;
     if(Array.isArray(model.objects)) {
       for(const o of model.objects) {
+        if(!o||!catalog.some(t=>t.id===o.type)||!Array.isArray(o.pos)||o.pos.length!==3||!Array.isArray(o.dim)||o.dim.length!==3)throw Error('Неверный объект компоновки.');
         const t=getType(o.type), count=t.group==='thruster'?Math.max(1,Number(o.count)||1):1;
         const load=Number(o.load),fill=Number(o.fill);
+        if(t.group==='thruster'&&(!Number.isInteger(count)||count>1e6||!['up','down','forward','back','left','right'].includes(o.direction)))throw Error('Проверьте количество и направление двигателей.');
         if(!Number.isFinite(load)||load<0||(t.group==='tank'&&(!Number.isFinite(fill)||fill<0||fill>100))||!o.pos.every(Number.isFinite)||!o.dim.every(v=>Number.isFinite(v)&&v>0)) throw Error('Проверьте массу, габариты и положение объектов.');
-        const contents=t.group==='tank'?load*fill/100:t.group==='cargo'||t.group==='thruster'?load:0;
+        const contents=t.group==='tank'?load*fill/100:t.group==='cargo'||t.group==='thruster'||t.group==='generator'?load:0;
         const blockMass=t.blockKg/1000*count, objectMass=blockMass+contents;
         total+=objectMass; blocksMass+=blockMass; cargo+=contents;
         o.pos.forEach((v,i)=>sum[i]+=objectMass*v);
@@ -50,26 +53,55 @@
     const r=center(model),ratios=r.delta.map((v,i)=>Math.abs(v)/([model.length,model.width,model.height][i]/2)),score=Math.max(...ratios);
     return {score,level:score<.1?'low':score<.25?'medium':'high',label:score<.1?'Малое смещение':score<.25?'Заметное смещение':'Большое смещение'};
   }
-  root.BalanceMath={center,displacement};
-  if(typeof module!=='undefined') module.exports=root.BalanceMath;
-  if(typeof document==='undefined') return;
-
-  const el=document.getElementById('balance'), I=()=>root.SE2I18N;
-  const fresh=()=>({mass:400,length:30,width:12,height:8,origin:[0,0,0],decks:[],zoom:1,focus:[0,0,0],objects:[initialObj('cargo25',20,[8,0,0]),initialObj('cargo25',40,[-8,0,0])]});
-  let m=fresh(),selected=0;
-  try {
-    const old=JSON.parse(localStorage.getItem('se2-balance-v1'));
-    if(old&&['length','width','height'].every(k=>Number.isFinite(old[k])&&old[k]>0)&&Array.isArray(old.origin)&&old.origin.length===3) {
-      const priorFill=Number.isFinite(old.fill)?old.fill:1;
-      m={...fresh(),...old,zoom:Number.isFinite(old.zoom)?old.zoom:1,focus:Array.isArray(old.focus)?old.focus:[0,0,0],objects:Array.isArray(old.objects)?old.objects.slice(0,60).map(o=>{
-        const t=getType(o.type),independentFill=Number.isFinite(o.fill),fill=independentFill?o.fill:priorFill*100;
-        const savedLoad=Math.max(0,Number(o.load)||0),fullLoad=t.group==='cargo'&&!independentFill?savedLoad*priorFill:savedLoad;
-        return {...initialObj(t.id,0,o.pos),...o,type:t.id,load:fullLoad,fill:t.group==='tank'?fill:0,count:Math.max(1,Number(o.count)||1),direction:o.direction||'up',dim:Array.isArray(o.dim)?o.dim:[t.size,t.size,t.size]};
-      }):Array.isArray(old.cargo)?old.cargo.slice(0,60).map(o=>({...initialObj('cargo25',Math.max(0,Number(o.mass)||0)*priorFill,o.pos),dim:Array.isArray(o.dim)?o.dim:[2.5,2.5,2.5]})):[]};
-      m.decks=Array.isArray(old.decks)&&old.decks.length<=2&&old.decks.every((v,i,a)=>Number.isFinite(v)&&v>=.01&&v<=.99&&(!i||v-a[i-1]>=.01))?[...old.decks]:[];
-      center(m);
+  const MAX_OBJECTS=200;
+  const STORAGE_KEY='se2-balance-v1', RECOVERY_KEY='se2-balance-recovery-v1';
+  const fresh=()=>({mass:400,length:30,width:12,height:8,origin:[0,0,0],contentsSchema:1,decks:[],zoom:1,focus:[0,0,0],objects:[initialObj('cargo25',20,[8,0,0]),initialObj('cargo25',40,[-8,0,0])]});
+  const finite=v=>Number.isFinite(v)&&Math.abs(v)<=1e9;
+  const vector=v=>Array.isArray(v)&&v.length===3&&v.every(finite);
+  function restoreLayout(old){
+    if(!old||!['length','width','height','mass'].every(k=>finite(old[k])&&old[k]>0)||!vector(old.origin))throw Error('Проверьте массу, размеры и центр корабля.');
+    const list=Array.isArray(old.objects)?old.objects:old.cargo;
+    if(!Array.isArray(list)||list.length>MAX_OBJECTS)throw Error('В схеме допускается до 200 объектов. Исходные данные не обрезаны.');
+    const priorFill=old.fill??1;if(!finite(priorFill)||priorFill<0||priorFill>1)throw Error('Неверная загрузка старой схемы.');
+    const objects=list.map(o=>{
+      if(!o||!vector(o.pos))throw Error('Неверное положение объекта.');
+      const legacy=!Array.isArray(old.objects),type=legacy?'cargo25':o.type,t=catalog.find(t=>t.id===type);
+      if(!t)throw Error('Неизвестный блок в схеме.');
+      const load=legacy?o.mass:o.load;if(!finite(load)||load<0)throw Error('Неверная масса объекта.');
+      const independent=o.fill!=null,fill=t.group==='tank'?(independent?o.fill:priorFill*100):0;
+      const count=o.count??1,dim=o.dim??[t.size,t.size,t.size],direction=o.direction??'up';
+      if(!Number.isInteger(count)||count<1||count>1e6||!vector(dim)||!dim.every(v=>v>0)||!finite(fill)||fill<0||fill>100)throw Error('Неверные габариты, количество или заполнение.');
+      if(t.group==='thruster'&&!['up','down','forward','back','left','right'].includes(direction))throw Error('Неверное направление двигателя.');
+      if(o.external!=null&&typeof o.external!=='boolean')throw Error('Неверный тип крепления.');
+      return {...initialObj(type,0,[...o.pos]),load:t.group==='generator'&&!old.contentsSchema?0:load*(legacy||t.group==='cargo'&&!independent?priorFill:1),fill,count,direction,dim:[...dim],external:o.external??t.group==='thruster',customDimensions:!!o.customDimensions};
+    });
+    const zoom=old.zoom??1,focus=old.focus??[0,0,0],decks=old.decks??[];
+    if(!finite(zoom)||zoom<.5||zoom>4||!vector(focus)||!Array.isArray(decks)||decks.length>2||!decks.every((v,i,a)=>finite(v)&&v>=.01&&v<=.99&&(!i||v-a[i-1]>=.01)))throw Error('Неверный масштаб или палубы.');
+    const model={...fresh(),mass:old.mass,length:old.length,width:old.width,height:old.height,origin:[...old.origin],zoom,focus:[...focus],decks:[...decks],objects};
+    if(finite(old.viewScale)&&old.viewScale>0)model.viewScale=old.viewScale;
+    center(model);return model;
+  }
+  function readLayoutStorage(storage){
+    let raw=null,recovery=null;
+    try{
+      raw=storage.getItem(STORAGE_KEY);recovery=storage.getItem(RECOVERY_KEY);
+      if(raw===null)return {model:fresh(),recovery,canSave:true};
+      return {model:restoreLayout(JSON.parse(raw)),recovery,canSave:true};
+    }catch{
+      // Never overwrite the original unless its recovery copy was actually saved.
+      let canSave=false;
+      if(raw!==null){recovery=raw;try{storage.setItem(RECOVERY_KEY,raw);canSave=true;}catch{}}
+      return {model:fresh(),recovery,canSave,recovered:raw!==null};
     }
-  } catch {}
+  }
+  root.BalanceMath={center,displacement,restoreLayout,readLayoutStorage};
+  if(typeof module!=='undefined')module.exports=root.BalanceMath;
+  if(typeof document==='undefined')return;
+  const el=document.getElementById('balance'), I=()=>root.SE2I18N;
+  let storageState;
+  try{storageState=readLayoutStorage(localStorage);}catch{storageState={model:fresh(),canSave:false,recovery:null};}
+  let m=storageState.model,selected=0,layoutMessage='';
+
   Object.assign(m,root.LayoutGeometry.proportionHull(m));
   function setHullDimension(k,v){m[k]=v;Object.assign(m,root.LayoutGeometry.proportionHull(m,k));}
   const fitScale=()=>{const d=root.LayoutGeometry.required(m,root.SE2_CATALOG.engines);return Math.min(420/Math.max(m.length,m.width,d[0],d[1]),130/Math.max(m.width,m.height,d[1],d[2]));};
@@ -83,8 +115,9 @@
     const en={cargo15:'Cargo Container 1.5 m',cargo25:'Cargo Container 2.5 m',cargo75:'Cargo Container 7.5 m',h2tank15:'Hydrogen Tank 1.5 m',h2tank5:'Hydrogen Tank 5 m',h2tank125:'Hydrogen Tank 12.5 m',o2tank15:'Oxygen Tank 1.5 m',gen15:'O₂/H₂ Generator 1.5 m',gen5:'O₂/H₂ Generator 5 m'};
     return I()?.language==='en'?en[t.id]:t.name;
   }
-  function persist(){try{localStorage.setItem('se2-balance-v1',JSON.stringify(m));}catch{}}
-  function objectMass(o){const t=getType(o.type),contents=t.group==='tank'?(Number(o.load)||0)*(Number(o.fill)||0)/100:t.group==='cargo'||t.group==='thruster'?(Number(o.load)||0):0;return t.blockKg/1000*(t.group==='thruster'?Math.max(1,Number(o.count)||1):1)+contents;}
+  function persist(){if(storageState.canSave)try{localStorage.setItem(STORAGE_KEY,JSON.stringify(m));}catch{storageState.canSave=false;}const status=document.getElementById('layout-storage-status');if(status)status.textContent=tr(storageState.canSave?'Схема автоматически сохраняется в этом браузере.':'Автосохранение недоступно. Скачайте схему через «Экспорт компоновки».',storageState.canSave?'Layout is saved automatically in this browser.':'Autosave unavailable. Download the layout using Export layout.');}
+  function downloadLayout(text,name){const url=URL.createObjectURL(new Blob([text],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  function objectMass(o){const t=getType(o.type),contents=t.group==='tank'?(Number(o.load)||0)*(Number(o.fill)||0)/100:t.group==='cargo'||t.group==='thruster'||t.group==='generator'?(Number(o.load)||0):0;return t.blockKg/1000*(t.group==='thruster'?Math.max(1,Number(o.count)||1):1)+contents;}
   function collisions(){
     const out=[];
     for(let i=0;i<m.objects.length;i++){
@@ -100,10 +133,10 @@
       : t.group==='tank'
         ? `<label>Масса газа при 100% заполнении, т<input type="number" min="0" step="any" data-object="load" value="${o.load}"></label><label>Масса бака, кг<input type="number" value="${t.blockKg}" disabled></label><label class="object-fill">Заполнение бака: ${fmt(o.fill)}%<input type="range" min="0" max="100" step="1" data-object="fill" value="${o.fill}"></label><div class="quick load-presets"><button data-tank-fill="0">Пустой</button><button data-tank-fill="100">Полный</button></div><p class="muted small">Заполнение каждого бака задаётся отдельно и меняет его массу газа. Введи массу газа для полного бака: перевод игровых литров в массу в игре не подтверждён.</p>`
         : t.group==='generator'
-          ? `<label>Масса блока, кг<input type="number" value="${t.blockKg}" disabled></label><p class="muted small">Генератор учитывается как блок. Общий переключатель загрузки на него не действует.</p>`
+          ? `<label>${tr("Лёд и содержимое, т","Ice and contents, t")}<input type="number" min="0" step="any" data-object="load" value="${o.load}"></label><label>Масса блока, кг<input type="number" value="${t.blockKg}" disabled></label><p class="muted small">${tr("Масса содержимого прибавляется к массе генератора. Производство газа здесь не рассчитывается.","Contents mass is added to generator mass. Gas production is not simulated here.")}</p>`
           : `<label>Количество одинаковых двигателей<input type="number" min="1" step="1" data-object="count" value="${o.count}"></label><label>Масса всех этих двигателей, т<input type="number" min="0" step="any" data-object="load" value="${o.load}"></label><label>${tr('Крепление','Mounting')}<select data-object="external"><option value="external" ${external(o)?'selected':''}>${tr('Снаружи корпуса','Outside hull')}</option><option value="internal" ${!external(o)?'selected':''}>${tr('Внутри корпуса','Inside hull')}</option></select></label><label>Направление тяги<select data-object="direction">${[['up','Вверх'],['down','Вниз'],['forward','Вперёд'],['back','Назад'],['left','Влево'],['right','Вправо']].map(([v,l])=>`<option value="${v}" ${o.direction===v?'selected':''}>${I()?.language==='en'?({up:'Up',down:'Down',forward:'Forward',back:'Back',left:'Left',right:'Right'}[v]):l}</option>`).join('')}</select></label><p class="muted small">Размер двигателя для схемы берётся из каталога. Его массу введи из игры; она не подтверждена в каталоге сайта.</p>`;
     const capacity=t.group==='cargo'?`Предел груза: ${fmt(t.capacity)} т.`:t.group==='tank'?`Ёмкость бака: ${fmt(t.capacity)} игровых литров.`:t.group==='generator'?`Инвентарь генератора: до ${fmt(t.capacity)} кг льда.`:`Двигатели добавляются для планировки; масса не задана автоматически.`;
-    const over=t.group==='cargo'&&o.load>t.capacity?'<p class="layout-warning">Груз превышает паспортную вместимость контейнера.</p>':'';
+    const over=(t.group==='cargo'&&o.load>t.capacity||t.group==='generator'&&o.load>t.capacity/1000)?'<p class="layout-warning">Содержимое превышает каталожный предел массы инвентаря.</p>':'';
     return `<div class="object-card"><h3>${esc(name(t))} · ${fmt(t.size)} м</h3><p class="small muted">${capacity}</p><div class="fields">${contents}</div>${over}<h4>${t.group==='thruster'?tr('Габарит одного двигателя (Д × Ш × В), м','One engine envelope (L × W × H), m'):'Габарит модели (Д × Ш × В), м'}</h4><div class="fields three">${['Длина','Ширина','Высота'].map((v,i)=>`<label>${I()?.language==='en'?['Length','Width','Height'][i]:v}<input type="number" min="0.1" step="0.1" data-dim="${i}" value="${o.dim[i]}"></label>`).join('')}</div><p class="small muted">Объём габарита: ${fmt(o.dim[0]*o.dim[1]*o.dim[2])} м³ · масса объекта: ${fmt(objectMass(o))} т. ${t.group==='thruster'?'Установленные блоки двигателей должны входить в массу корпуса или указанную выше массу.':''}</p><p class="muted small">Координаты центра объекта от середины корпуса:</p>${['Корма ← → нос','Правый ← → левый борт','Низ ← → верх'].map((v,i)=>`<label class="balance-coordinate">${I()?.language==='en'?['Aft ← → nose','Starboard ← → port','Bottom ← → top'][i]:v}: ${fmt(o.pos[i])} м<input type="range" aria-label="${v}" data-pos="${i}" min="${-coordinateReach(o,i)}" max="${coordinateReach(o,i)}" step="0.01" value="${o.pos[i]}"></label>`).join('')}</div>`;
   }
   const tr=(ru,en)=>I()?.language==='en'?en:ru;
@@ -164,7 +197,7 @@
     });
   }
   function shell(){
-    el.innerHTML=`<h2>Компоновка и баланс корабля</h2><p class="muted">Сначала расставь блоки и груз, проверь габарит, а затем передай расчётную массу на страницу условий полёта.</p><div class="quick balance-fill"><span>Заполнение задаётся отдельно в карточке каждого объекта.</span><button id="balance-focus">Приблизить выбранный объект</button><button id="balance-zoom-reset">${tr('Показать корабль целиком','Fit whole ship')}</button></div><div class="legend"><span class="engine-legend">${tr('Фиолетовые блоки Д№ — двигатели; подпись помогает найти маленький блок. ⊙ к вам · ⊗ от вас.','Purple E# blocks are engines; labels locate small blocks. ⊙ toward you · ⊗ away.')}</span><span>◆ Центр с грузом</span><span>＋ Центр пустого корабля</span><span>Цвет показывает величину смещения</span></div><div id="balance-indicator"></div><div id="thrust-summary"></div><div id="balance-views">${viewPanel('top')}${viewPanel('side')}<details class="extra-projection"><summary>${tr('Дополнительно: вид спереди','Additional: front view')}</summary>${viewPanel('front')}</details></div><p class="hint">${tr('Подгоняй корпус ползунками прямо на каждой схеме или вводи точные размеры в метрах. Общие размеры синхронизированы между тремя видами. Размеры и положение оборудования при этом не меняются. Пунктир показывает габарит корпуса без учёта толщины обшивки и проходов.','Resize the hull with the sliders inside each view or enter exact dimensions in metres. Shared dimensions stay synchronized across all three views. Equipment keeps its size and position. The dashed outline marks the hull envelope; allow extra room for hull thickness and access.')}</p><p class="muted small">${tr('Вид сверху: длина × ширина; спереди: ширина × высота; сбоку: длина × высота. Масштаб метров одинаковый и не меняется от размеров корпуса. Чтобы вместить корпус в кадр, нажми «Показать корабль целиком».','Top: length × width; front: width × height; side: length × height. Both views use the same fixed metre scale. Use Fit whole ship to fit the hull in view.')} Схема показывает габаритные контуры, не копирует текстуры модели.</p><div class="balance-controls"><details class="ship-envelope"><summary>Масса и размер корпуса</summary><div class="fields"><label>Масса остального корабля, т<input type="number" min="0.001" step="any" data-b="mass" value="${m.mass}"></label>${['length','width','height'].map((k,i)=>`<label>${['Длина','Ширина','Высота'][i]}, м<input type="number" min="5" max="${geometry.hullLimits[k][1]}" step="0.1" data-b="${k}" value="${m[k]}"></label>`).join('')}</div><p class="hint">Масса остального корабля включает всё, кроме перечисленных блоков и их содержимого. Размеры задают масштаб корпуса; исходные габариты блоков приблизительные и поправляются в карточке.</p><details><summary>Уточнить центр пустого корабля</summary><p class="muted small">Координаты относительно середины корпуса, в метрах. Если положение неизвестно, оставь 0.</p>${['Нос + / корма −','Левый борт + / правый −','Верх + / низ −'].map((t,i)=>`<label class="balance-coordinate">${t}<input type="number" step="any" data-origin="${i}" value="${m.origin[i]}"></label>`).join('')}</details></details></div><div class="balance-layout"><div>${objectSections()}<div id="balance-editor"></div></div><div id="balance-result"></div></div><p class="hint">У каждого грузового контейнера своя масса, у каждого бака — своё заполнение и отдельно заданная масса газа. Генераторы не получают общий режим «пустой/полный». Габариты на схеме редактируются, но точные три измерения модели для всех блоков в каталоге игры не опубликованы.</p><details><summary>Источники данных блоков</summary><ul><li><a href="https://spaceengineers2.wiki.gg/wiki/Cargo_Container_1.5_m" target="_blank" rel="noreferrer">Грузовые контейнеры SE2 Wiki</a></li><li><a href="https://spaceengineers2.wiki.gg/wiki/Hydrogen_Tank_1.5_m" target="_blank" rel="noreferrer">Водородные баки</a>, <a href="https://spaceengineers2.wiki.gg/wiki/Oxygen_Tank_1.5_m" target="_blank" rel="noreferrer">кислородный бак</a></li><li><a href="https://spaceengineers2.wiki.gg/wiki/O2/H2_Generator_1.5_m" target="_blank" rel="noreferrer">Генераторы O₂/H₂</a></li></ul></details>`;
+    el.innerHTML=`<h2>Компоновка и баланс корабля</h2><p class="muted">Сначала расставь блоки и груз, проверь габарит, а затем передай расчётную массу на страницу условий полёта.</p><div class="quick"><button id="layout-export">${tr('Экспорт компоновки','Export layout')}</button><label class="button">${tr('Импорт компоновки','Import layout')}<input id="layout-import" type="file" accept="application/json" hidden></label></div><p id="layout-storage-status" class="hint"></p><p id="layout-message" role="status">${esc(layoutMessage)}</p>${storageState.recovery?'<div class="notice">'+tr('Сохранена резервная копия схемы, которую не удалось загрузить.','A recovery copy of a layout that could not be loaded is available.')+' <button id="layout-recovery">'+tr('Скачать исходные данные','Download original data')+'</button></div>':''}<div class="quick balance-fill"><span>Заполнение задаётся отдельно в карточке каждого объекта.</span><button id="balance-focus">Приблизить выбранный объект</button><button id="balance-zoom-reset">${tr('Показать корабль целиком','Fit whole ship')}</button></div><div class="legend"><span class="engine-legend">${tr('Фиолетовые блоки Д№ — двигатели; подпись помогает найти маленький блок. ⊙ к вам · ⊗ от вас.','Purple E# blocks are engines; labels locate small blocks. ⊙ toward you · ⊗ away.')}</span><span>◆ Центр с грузом</span><span>＋ Центр остального корабля</span><span>Цвет показывает величину смещения</span></div><div id="balance-indicator"></div><div id="thrust-summary"></div><div id="balance-views">${viewPanel('top')}${viewPanel('side')}<details class="extra-projection"><summary>${tr('Дополнительно: вид спереди','Additional: front view')}</summary>${viewPanel('front')}</details></div><p class="hint">${tr('Подгоняй корпус ползунками прямо на каждой схеме или вводи точные размеры в метрах. Общие размеры синхронизированы между тремя видами. Размеры и положение оборудования при этом не меняются. Пунктир показывает габарит корпуса без учёта толщины обшивки и проходов.','Resize the hull with the sliders inside each view or enter exact dimensions in metres. Shared dimensions stay synchronized across all three views. Equipment keeps its size and position. The dashed outline marks the hull envelope; allow extra room for hull thickness and access.')}</p><p class="muted small">${tr('Вид сверху: длина × ширина; спереди: ширина × высота; сбоку: длина × высота. Масштаб метров одинаковый и не меняется от размеров корпуса. Чтобы вместить корпус в кадр, нажми «Показать корабль целиком».','Top: length × width; front: width × height; side: length × height. Both views use the same fixed metre scale. Use Fit whole ship to fit the hull in view.')} Схема показывает габаритные контуры, не копирует текстуры модели.</p><div class="balance-controls"><details class="ship-envelope"><summary>Масса и размер корпуса</summary><div class="fields"><label>Масса остального корабля, т<input type="number" min="0.001" step="any" data-b="mass" value="${m.mass}"></label>${['length','width','height'].map((k,i)=>`<label>${['Длина','Ширина','Высота'][i]}, м<input type="number" min="5" max="${geometry.hullLimits[k][1]}" step="0.1" data-b="${k}" value="${m[k]}"></label>`).join('')}</div><p class="hint">Масса остального корабля включает всё, кроме перечисленных блоков и их содержимого. Размеры задают масштаб корпуса; исходные габариты блоков приблизительные и поправляются в карточке.</p><details><summary>Уточнить центр остального корабля</summary><p class="muted small">Координаты относительно середины корпуса, в метрах. Если положение неизвестно, оставь 0.</p>${['Нос + / корма −','Левый борт + / правый −','Верх + / низ −'].map((t,i)=>`<label class="balance-coordinate">${t}<input type="number" step="any" data-origin="${i}" value="${m.origin[i]}"></label>`).join('')}</details></details></div><div class="balance-layout"><div>${objectSections()}<div id="balance-editor"></div></div><div id="balance-result"></div></div><p class="hint">У каждого грузового контейнера своя масса, у каждого бака — своё заполнение и отдельно заданная масса газа. Генераторы не получают общий режим «пустой/полный». Габариты на схеме редактируются, но точные три измерения модели для всех блоков в каталоге игры не опубликованы.</p><details><summary>Источники данных блоков</summary><ul><li><a href="https://spaceengineers2.wiki.gg/wiki/Cargo_Container_1.5_m" target="_blank" rel="noreferrer">Грузовые контейнеры SE2 Wiki</a></li><li><a href="https://spaceengineers2.wiki.gg/wiki/Hydrogen_Tank_1.5_m" target="_blank" rel="noreferrer">Водородные баки</a>, <a href="https://spaceengineers2.wiki.gg/wiki/Oxygen_Tank_1.5_m" target="_blank" rel="noreferrer">кислородный бак</a></li><li><a href="https://spaceengineers2.wiki.gg/wiki/O2_H2_Generator_1.5_m" target="_blank" rel="noreferrer">Генераторы O₂/H₂</a></li></ul></details>`;
     draw();
   }
   function svg(view){
@@ -208,11 +241,13 @@
     document.getElementById('balance-result').insertAdjacentHTML('beforeend','<h3>'+tr('Габариты основного корпуса','Main hull envelope')+'</h3><p class="'+(fits?'goodtext':'layout-warning')+'">'+tr(fits?'Помещается по габаритам.':need.some((v,i)=>v>geometry.hullLimits[['length','width','height'][i]][1])?'Оборудование не помещается в допустимый корпус. Переставьте блоки или уменьшите их количество.':'Нужно увеличить корпус.',fits?'Fits the hull envelope.':'Equipment does not fit. Enlarge within limits or rearrange blocks.')+'</p><p>'+tr('При текущем расположении Д × Ш × В:','At current positions L × W × H:')+' <strong>'+need.map(v=>fmt(v)).join(' × ')+' '+tr('м','m')+'</strong></p><button id="fit-hull">'+tr('Увеличить корпус до габарита','Expand hull to envelope')+'</button><p class="small muted">'+tr('Одинаковые двигатели стоят в один ряд; их количество увеличивает занимаемое место. Подсказка не учитывает проходы и струю. Размер одного двигателя задаётся в карточке: каталожный размер пока номинальный, точные три оси не подтверждены.','Identical engines occupy a row. Counts increase their envelope. Access and exhaust clearance are excluded. Edit individual engine dimensions in its card: catalogue dimensions are nominal, the three axes remain unverified.')+'</p><p>'+tr('Размеры корпуса: длина 5–200 м; ширина и высота 5–20 м. Длина не больше 10 ширин или высот; корпус не выше своей ширины. Связанные размеры меняются вместе.','Hull limits: length 5–200 m; width and height 5–20 m.')+'</p><h3>'+tr('Тяга показанного оснащения','Displayed engine thrust')+'</h3><p class="'+(f.up>=weight?'goodtext':'layout-warning')+'">'+tr(f.up>=weight?'По вертикальной тяге удерживает высоту.':'Вертикальной тяги недостаточно.',f.up>=weight?'Vertical thrust can hold altitude.':'Insufficient vertical thrust.')+' '+fmt(f.up)+' / '+fmt(weight)+' kN</p><p class="small muted">'+tr('Цвет стрелок показывает достаточность тяги с учётом ускорений и запаса в текущей среде; этапы проверяются во вкладке «Полёт». Длина и толщина показывают относительную силу. Учитывается атмосфера из условий полёта. Питание и топливо проверяются на странице расчёта.','Arrows show force direction; length and brightness use the maximum across all six directions. Flight atmosphere is applied. Check power and fuel on the flight page.')+'</p>');
     const outsideEngines=m.objects.filter(o=>external(o)&&o.pos.some((v,k)=>Math.abs(v)+objectDims(o)[k]/2>dim(k)/2+.001)).length;
     if(outsideEngines)document.getElementById('balance-indicator').insertAdjacentHTML('beforeend','<p class="external-note">'+tr('Наружное размещение двигателей: ','External engines: ')+outsideEngines+tr('. Допустимо; основной корпус не расширяется под них.','. Allowed; hull fitting excludes them.')+'</p>');
-    persist();
+    m.contentsSchema=1;persist();
   }
   function activatePage(id){const b=document.querySelector(`nav [data-page="${id}"]`);if(b)b.click();}
   el.addEventListener('click',e=>{
     const b=e.target.closest('button');if(!b)return;
+    if(b.id==='layout-export'){downloadLayout(JSON.stringify({kind:'se2-layout',version:1,layout:m},null,2),'se2-layout.json');return;}
+    if(b.id==='layout-recovery'){downloadLayout(storageState.recovery,'se2-layout-recovery.json');return;}
     if(b.dataset.zoomStep!==undefined){m.zoom=Math.max(.5,Math.min(4,Math.round((m.zoom+Number(b.dataset.zoomStep)*.1)*10)/10));}
 
     else if(b.dataset.decks!==undefined){const n=Number(b.dataset.decks);m.decks=Array.from({length:n-1},(_,i)=>(i+1)/n);}
@@ -222,7 +257,7 @@
     else if(b.dataset.tankFill!==undefined){if(m.objects[selected])m.objects[selected].fill=Number(b.dataset.tankFill);}
     else if(b.dataset.select!==undefined)selected=Number(b.dataset.select);
     else if(b.dataset.remove!==undefined){m.objects.splice(Number(b.dataset.remove),1);selected=Math.max(0,Math.min(selected,m.objects.length-1));}
-    else if(b.dataset.addGroup){const choice=document.getElementById('balance-'+b.dataset.addGroup+'-type'),t=catalog.find(t=>t.id===choice.value&&((t.group==='thruster')===(b.dataset.addGroup==='engines')));if(!t)return;const o=initialObj(t.id,t.group==='cargo'?t.capacity:0,[0,0,0]);if(t.group==='thruster'){const direction=document.getElementById('balance-engine-direction').value;if(!root.Flight.dirs.includes(direction))return;o.direction=direction;placeEngine(o);}m.objects.push(o);selected=m.objects.length-1;choice.value='';syncAddControls();if(t.group==='thruster'){m.viewScale=fitScale();m.zoom=1;m.focus=[0,0,0];}}
+    else if(b.dataset.addGroup){if(m.objects.length>=MAX_OBJECTS){document.getElementById('layout-message').textContent=tr('Достигнут предел: 200 объектов. Группируйте одинаковые двигатели полем количества.','Limit reached: 200 objects. Group identical engines using the count field.');return;}const choice=document.getElementById('balance-'+b.dataset.addGroup+'-type'),t=catalog.find(t=>t.id===choice.value&&((t.group==='thruster')===(b.dataset.addGroup==='engines')));if(!t)return;const o=initialObj(t.id,t.group==='cargo'?t.capacity:0,[0,0,0]);if(t.group==='thruster'){const direction=document.getElementById('balance-engine-direction').value;if(!root.Flight.dirs.includes(direction))return;o.direction=direction;placeEngine(o);}m.objects.push(o);selected=m.objects.length-1;choice.value='';syncAddControls();if(t.group==='thruster'){m.viewScale=fitScale();m.zoom=1;m.focus=[0,0,0];}}
     else if(b.id==='balance-focus'){const o=m.objects[selected];if(o)m.focus=[...o.pos];m.zoom=Math.max(m.zoom,2);}
     else if(b.id==='balance-zoom-reset'){m.zoom=1;m.focus=[0,0,0];m.viewScale=fitScale();}
     else if(b.id==='balance-reset'){m=fresh();m.viewScale=fitScale();selected=0;shell();return;}
@@ -231,8 +266,14 @@
     draw();
     if(b.dataset.addGroup==='engines')document.getElementById('balance-top-canvas').scrollIntoView({block:'center',behavior:'smooth'});
   });
+  function validNumericInput(t){
+    if(!['number','range'].includes(t.type))return true;
+    const v=Number(t.value),positive=t.dataset.b!==undefined||t.dataset.dim!==undefined;
+    return t.value!==''&&finite(v)&&(!positive||v>0)&&(!(t.dataset.object==='load')||v>=0)&&(!(t.dataset.object==='fill')||v>=0&&v<=100)&&(!(t.dataset.object==='count')||Number.isInteger(v)&&v>=1&&v<=1e6);
+  }
   el.addEventListener('input',e=>{
     const t=e.target,o=m.objects[selected],n=Number(t.value);
+    if(!validNumericInput(t)){t.setAttribute('aria-invalid','true');document.getElementById('layout-message').textContent=tr('Недопустимое число. Расчёт сохраняет последнее допустимое значение; исправьте поле.','Invalid number. The calculation retains the last valid value; correct this field.');return;}t.removeAttribute('aria-invalid');if(!el.querySelector('[aria-invalid="true"]'))document.getElementById('layout-message').textContent='';
     if(t.dataset.addChoice){syncAddControls();return;}
     if(t.dataset.deck!==undefined){if(t.value!==''&&Number.isFinite(n)){moveDeck(+t.dataset.deck,n/m.height);draw(true);}return;}
     if(t.dataset.hullDim!==undefined){if(t.value!==''&&Number.isFinite(n)){setHullDimension(t.dataset.hullDim,n);draw(true);}return;}
@@ -246,8 +287,10 @@
     else if(t.dataset.dim!==undefined&&o){const v=Number(t.value);if(v>0){o.dim[+t.dataset.dim]=v;o.customDimensions=true;}draw(true);}
     else if(t.dataset.zoom!==undefined){m.zoom=Math.max(.5,Math.min(4,n||1));draw(true);}
   });
-  el.addEventListener('change',e=>{
+  el.addEventListener('change',async e=>{
+    if(e.target.id==='layout-import'){try{const file=e.target.files[0];if(!file)return;if(file.size>1000000)throw Error(tr('Файл превышает 1 МБ.','File exceeds 1 MB.'));const data=JSON.parse(await file.text());if(data.kind!=='se2-layout'||data.version!==1)throw Error(tr('Это не файл компоновки.','This is not a layout file.'));const next=restoreLayout(data.layout);Object.assign(next,geometry.proportionHull(next));m=next;selected=0;m.viewScale=fitScale();layoutMessage=tr('Компоновка импортирована. Профиль полёта не изменён.','Layout imported. Flight profile unchanged.');shell();}catch(err){document.getElementById('layout-message').textContent=tr('Ошибка импорта: ','Import error: ')+err.message;}finally{e.target.value='';}return;}
     const t=e.target,v=Number(t.value);
+    if(!validNumericInput(t)){layoutMessage=tr('Некорректное число: восстановлено последнее допустимое значение.','Invalid number: restored the last valid value.');shell();return;}
     if(t.dataset.addChoice){syncAddControls();return;}
     if(t.dataset.deck!==undefined){if(t.value!==''&&Number.isFinite(v))moveDeck(+t.dataset.deck,v/m.height);draw();}
     else if(t.dataset.hullDim!==undefined){if(t.value!==''&&Number.isFinite(v))setHullDimension(t.dataset.hullDim,v);t.value=m[t.dataset.hullDim];draw();}
